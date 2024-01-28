@@ -37,8 +37,13 @@ jobs:
         run: |
           copy target/release/yubikey_encrypt.exe releases/yubikey_encrypt.exe
 
-      - name: Copy binary for release
-        if: runner.os == 'Linux' || runner.os == 'macOS'
+      - name: Copy Linux binary for release
+        if: runner.os == 'Linux'
+        run: |
+          cp target/release/yubikey_encrypt releases/yubikey_encrypt_linux
+      
+      - name: Copy MacOS binary for release
+        if: runner.os == 'macOS'
         run: |
           cp target/release/yubikey_encrypt releases/yubikey_encrypt
 
