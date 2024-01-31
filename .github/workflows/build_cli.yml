@@ -22,12 +22,40 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install PCSC for Ubuntu
+      - name: Install `PCSC` for Ubuntu
         if: runner.os == 'Linux'
         run: sudo apt-get install libpcsclite-dev gengetopt -y
-
-      - name: Build
+      
+      - name: Add macOS `arm64` target
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin
+          
+      - name: Add Windows `arm64` target
+        if: runner.os == 'Windows'
+        run: |
+          rustup target add aarch64-pc-windows-msvc
+      
+      - name: Build for Linux, Windows and macOS `x86_64`
+        if: runner.os == 'Linux' || runner.os == 'Windows' || runner.os == 'macOS'
         run: cargo build --release
+
+      - name: Build for macOS `arm64`
+        if: runner.os == 'macOS'
+        run: |
+          cargo build --release --target=aarch64-apple-darwin
+          mv target/aarch64-apple-darwin/release/yubikey_encrypt target/aarch64-apple-darwin/release/yubikey_encrypt-arm64
+      
+      - name: Build for Windows `arm64`
+        if: runner.os == 'Windows'
+        run: |
+          cargo build --release --target=aarch64-pc-windows-msvc
+          mv target/aarch64-pc-windows-msvc/release/yubikey_encrypt.exe target/aarch64-pc-windows-msvc/release/yubikey_encrypt-arm64.exe
+
+      - name: Create macOS Universal binary
+        if: runner.os == 'macOS'
+        run: |
+          lipo -create -output target/release/yubikey_encrypt-universal target/release/yubikey_encrypt target/aarch64-apple-darwin/release/yubikey_encrypt-arm64
 
       - name: Prepare releases directory
         run: mkdir -p releases || md releases
@@ -35,24 +63,35 @@ jobs:
       - name: Copy Windows binary for release
         if: runner.os == 'Windows'
         run: |
-          copy target/release/yubikey_encrypt.exe releases/yubikey_encrypt.exe
-
+          Copy-Item target/release/yubikey_encrypt.exe releases/yubikey_encrypt.exe
+          Copy-Item target/aarch64-pc-windows-msvc/release/yubikey_encrypt-arm64.exe releases/yubikey_encrypt-arm64.exe
+          Compress-Archive -Path releases/yubikey_encrypt.exe, releases/yubikey_encrypt-arm64.exe -DestinationPath releases/yubikey_encrypt_windows.zip
+          Remove-Item releases/yubikey_encrypt.exe
+          Remove-Item releases/yubikey_encrypt-arm64.exe
+        shell: pwsh
+        
       - name: Copy Linux binary for release
         if: runner.os == 'Linux'
         run: |
-          cp target/release/yubikey_encrypt releases/yubikey_encrypt_linux
-      
+          cp target/release/yubikey_encrypt releases/yubikey_encrypt
+          chmod +x releases/*
+          tar -czvf releases/yubikey_encrypt_linux.tar.gz -C releases yubikey_encrypt
+          rm releases/yubikey_encrypt
+          
       - name: Copy MacOS binary for release
         if: runner.os == 'macOS'
         run: |
-          cp target/release/yubikey_encrypt releases/yubikey_encrypt
-
+          cp target/release/yubikey_encrypt-universal releases/yubikey_encrypt-universal
+          chmod +x releases/*
+          tar -czvf releases/yubikey_encrypt_macos-universal.tar.gz -C releases yubikey_encrypt-universal
+          rm releases/yubikey_encrypt-universal
+          
       - name: Generate SHA256 checksums for macOS
         if: runner.os == 'macOS'
         run: |
           cd releases/
           shasum -a 256 * > SHA256CHECKSUMS.txt
-
+      
       - name: Generate checksums for Linux and Windows
         if: runner.os == 'Linux' || runner.os == 'Windows'
         run: |
